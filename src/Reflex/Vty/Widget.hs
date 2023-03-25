@@ -46,13 +46,13 @@ mainWidgetWithHandle vty child =
     let inp' = fforMaybe inp $ \case
           V.EvResize {} -> Nothing
           x -> Just x
-    (shutdown, images) <- runThemeReader (constant V.defAttr) $
+    (shutdown, images) <- runThemeReader (pure V.defAttr) $
       runFocusReader (pure True) $
         runDisplayRegion (fmap (\(w, h) -> Region 0 0 w h) size) $
           runImageWriter $
             runNodeIdT $
               runInput inp' $ do
-                tellImages . ffor (current size) $ \(w, h) -> [V.charFill V.defAttr ' ' w h]
+                tellImages . ffor size $ \(w, h) -> [V.charFill V.defAttr ' ' w h]
                 child
     return $ VtyResult
       { _vtyResult_picture = fmap (V.picForLayers . reverse) images
@@ -421,17 +421,17 @@ runFocusReader b = flip runReaderT b . unFocusReader
 -- | A class for widgets that can produce images to draw to the display
 class (Reflex t, Monad m) => HasImageWriter t m | m -> t where
   -- | Send images upstream for rendering
-  tellImages :: Behavior t [Image] -> m ()
-  default tellImages :: (f m' ~ m, Monad m', MonadTrans f, HasImageWriter t m') => Behavior t [Image] -> m ()
+  tellImages :: Dynamic t [Image] -> m ()
+  default tellImages :: (f m' ~ m, Monad m', MonadTrans f, HasImageWriter t m') => Dynamic t [Image] -> m ()
   tellImages = lift . tellImages
   -- | Apply a transformation to the images produced by the child actions
-  mapImages :: (Behavior t [Image] -> Behavior t [Image]) -> m a -> m a
-  default mapImages :: (f m' ~ m, Monad m', MFunctor f, HasImageWriter t m') => (Behavior t [Image] -> Behavior t [Image]) -> m a -> m a
+  mapImages :: (Dynamic t [Image] -> Dynamic t [Image]) -> m a -> m a
+  default mapImages :: (f m' ~ m, Monad m', MFunctor f, HasImageWriter t m') => (Dynamic t [Image] -> Dynamic t [Image]) -> m a -> m a
   mapImages f = hoist (mapImages f)
 
 -- | A widget that can produce images to draw onto the display
 newtype ImageWriter t m a = ImageWriter
-  { unImageWriter :: BehaviorWriterT t [Image] m a }
+  { unImageWriter :: DynamicWriterT t [Image] m a }
   deriving
     ( Functor
     , Applicative
@@ -466,11 +466,11 @@ instance HasImageWriter t m => HasImageWriter t (DynamicWriterT t x m)
 instance HasImageWriter t m => HasImageWriter t (EventWriterT t x m)
 instance HasImageWriter t m => HasImageWriter t (NodeIdT m)
 
-instance (Monad m, Reflex t) => HasImageWriter t (ImageWriter t m) where
-  tellImages = ImageWriter . tellBehavior
+instance (Monad m, MonadFix m, Reflex t) => HasImageWriter t (ImageWriter t m) where
+  tellImages = ImageWriter . tellDyn
   mapImages f (ImageWriter x) = ImageWriter $ do
-    (a, images) <- lift $ runBehaviorWriterT x
-    tellBehavior $ f images
+    (a, images) <- lift $ runDynamicWriterT x
+    tellDyn $ f images
     pure a
 
 instance HasDisplayRegion t m => HasDisplayRegion t (ImageWriter t m)
@@ -478,20 +478,20 @@ instance HasFocusReader t m => HasFocusReader t (ImageWriter t m)
 
 -- | Run a widget that can produce images
 runImageWriter
-  :: (Reflex t, Monad m)
+  :: (Reflex t, Monad m, MonadFix m)
   => ImageWriter t m a
-  -> m (a, Behavior t [Image])
-runImageWriter = runBehaviorWriterT . unImageWriter
+  -> m (a, Dynamic t [Image])
+runImageWriter = runDynamicWriterT . unImageWriter
 
 -- * Theming
 
 -- | A class for things that can be visually styled
 class (Reflex t, Monad m) => HasTheme t m | m -> t where
-  theme :: m (Behavior t V.Attr)
-  default theme :: (f m' ~ m, Monad m', MonadTrans f, HasTheme t m') => m (Behavior t V.Attr)
+  theme :: m (Dynamic t V.Attr)
+  default theme :: (f m' ~ m, Monad m', MonadTrans f, HasTheme t m') => m (Dynamic t V.Attr)
   theme = lift theme
-  localTheme :: (Behavior t V.Attr -> Behavior t V.Attr) -> m a -> m a
-  default localTheme :: (f m' ~ m, Monad m', MFunctor f, HasTheme t m') => (Behavior t V.Attr -> Behavior t V.Attr) -> m a -> m a
+  localTheme :: (Dynamic t V.Attr -> Dynamic t V.Attr) -> m a -> m a
+  default localTheme :: (f m' ~ m, Monad m', MFunctor f, HasTheme t m') => (Dynamic t V.Attr -> Dynamic t V.Attr) -> m a -> m a
   localTheme f = hoist (localTheme f)
 
 instance HasTheme t m => HasTheme t (ReaderT x m)
@@ -506,7 +506,7 @@ instance HasTheme t m => HasTheme t (FocusReader t m)
 
 -- | A widget that has access to theme information
 newtype ThemeReader t m a = ThemeReader
-  { unThemeReader :: ReaderT (Behavior t V.Attr) m a }
+  { unThemeReader :: ReaderT (Dynamic t V.Attr) m a }
   deriving
     ( Functor
     , Applicative
@@ -546,7 +546,7 @@ instance MonadNodeId m => MonadNodeId (ThemeReader t m)
 -- | Run a 'ThemeReader' action with the given focus value
 runThemeReader
   :: (Reflex t, Monad m)
-  => Behavior t V.Attr
+  => Dynamic t V.Attr
   -> ThemeReader t m a
   -> m a
 runThemeReader b = flip runReaderT b . unThemeReader
@@ -567,9 +567,9 @@ withinImage (Region left top width height)
 -- | Crop a behavior of images to a behavior of regions. See 'withinImage'.
 imagesInRegion
   :: Reflex t
-  => Behavior t Region
-  -> Behavior t [Image]
-  -> Behavior t [Image]
+  => Dynamic t Region
+  -> Dynamic t [Image]
+  -> Dynamic t [Image]
 imagesInRegion reg = liftA2 (\r is -> map (withinImage r) is) reg
 
 -- * Running sub-widgets
@@ -589,7 +589,7 @@ pane
   -> m a
   -> m a
 pane dr foc child = localRegion (const dr) $
-  mapImages (imagesInRegion $ current dr) $
+  mapImages (imagesInRegion dr) $
     localFocus (const foc) $
       inputInFocusedRegion >>= \e -> localInput (const e) child
 

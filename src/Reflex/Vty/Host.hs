@@ -37,7 +37,7 @@ type VtyEvent = V.Event
 
 -- | The output of a 'VtyApp'.
 data VtyResult t = VtyResult
-  { _vtyResult_picture :: Behavior t V.Picture
+  { _vtyResult_picture :: Dynamic t V.Picture
   -- ^ The current vty output. 'runVtyAppWithHandle' samples this value every time an
   -- event fires and updates the display.
   , _vtyResult_shutdown :: Event t ()
@@ -140,7 +140,7 @@ runVtyAppWithHandle vty vtyGuest = flip onException (V.shutdown vty) $
     -- display update is necessary. In this implementation that is when various
     -- events occur.
     let updateVty =
-          sample (_vtyResult_picture vtyResult) >>= liftIO . V.update vty
+          sample (current (_vtyResult_picture vtyResult)) >>= liftIO . V.update vty
 
     -- Read the trigger reference for the post-build event. This will be
     -- 'Nothing' if the guest application hasn't subscribed to this event.

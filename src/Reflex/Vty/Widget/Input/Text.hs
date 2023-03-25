@@ -80,15 +80,15 @@ textInput cfg = do
   dh <- displayHeight
   dw <- displayWidth
   bt <- theme
-  attr0 <- sample bt
+  attr0 <- sample (current bt)
   rec
       -- we split up the events from vty and the one users provide to avoid cyclical
       -- update dependencies. This way, users may subscribe only to UI updates.
       let valueChangedByCaller = _textInputConfig_modify cfg
       let valueChangedByUI = mergeWith (.)
             [ uncurry (updateTextZipper (_textInputConfig_tabWidth cfg)) <$> attach (current dh) i
-            , let displayInfo = (,) <$> current rows <*> scrollTop
-              in ffor (attach displayInfo click) $ \((dl, st), MouseDown _ (mx, my) _) ->
+            , let displayInfo = (,) <$> rows <*> scrollTop
+              in ffor (attach (current displayInfo) click) $ \((dl, st), MouseDown _ (mx, my) _) ->
                 goToDisplayLinePosition mx (st + my) dl
             ]
       v <- foldDyn ($) (_textInputConfig_initialValue cfg) $ mergeWith (.)
@@ -106,7 +106,7 @@ textInput cfg = do
           toDisplayLines attr (w, s, x)  =
             let c = if x then toCursorAttrs attr else attr
             in displayLines w attr c s
-      attrDyn <- holdDyn attr0 $ pushAlways (\_ -> sample bt) (updated rowInputDyn)
+      attrDyn <- holdDyn attr0 $ pushAlways (\_ -> sample (current bt)) (updated rowInputDyn)
       let rows = ffor2 attrDyn rowInputDyn toDisplayLines
           img = images . _displayLines_spans <$> rows
       y <- holdUniqDyn $ fmap snd _displayLines_cursorPos <$> rows
@@ -115,9 +115,9 @@ textInput cfg = do
             | cursorY < st = cursorY
             | cursorY >= st + h = cursorY - h + 1
             | otherwise = st
-      let hy = attachWith newScrollTop scrollTop $ updated $ zipDyn dh y
-      scrollTop <- hold 0 hy
-      tellImages $ (\imgs st -> (:[]) . V.vertCat $ drop st imgs) <$> current img <*> scrollTop
+      let hy = attachWith newScrollTop (current scrollTop) $ updated $ zipDyn dh y
+      scrollTop <- holdDyn 0 hy
+      tellImages $ (\imgs st -> (:[]) . V.vertCat $ drop st imgs) <$> img <*> scrollTop
   return $ TextInput
     { _textInput_value = value <$> v
     , _textInput_userInput = attachWith (&) (current v) valueChangedByUI

@@ -26,8 +26,8 @@ import Reflex.Vty.Widget.Text
 
 -- | Configuration options for the 'button' widget
 data ButtonConfig t = ButtonConfig
-  { _buttonConfig_boxStyle :: Behavior t BoxStyle
-  , _buttonConfig_focusStyle :: Behavior t BoxStyle
+  { _buttonConfig_boxStyle :: Dynamic t BoxStyle
+  , _buttonConfig_focusStyle :: Dynamic t BoxStyle
   }
 
 instance Reflex t => Default (ButtonConfig t) where
@@ -42,7 +42,7 @@ button
 button cfg child = do
   f <- focus
   let style = do
-        isFocused <- current f
+        isFocused <- f
         if isFocused
           then _buttonConfig_focusStyle cfg
           else _buttonConfig_boxStyle cfg
@@ -55,7 +55,7 @@ button cfg child = do
 textButton
   :: (MonadFix m, MonadHold t m, HasDisplayRegion t m, HasFocusReader t m, HasTheme t m, HasImageWriter t m, HasInput t m)
   => ButtonConfig t
-  -> Behavior t Text
+  -> Dynamic t Text
   -> m (Event t ())
 textButton cfg = button cfg . text -- TODO Centering etc.
 
@@ -72,7 +72,7 @@ textButtonStatic cfg = textButton cfg . pure
 -- | A clickable link widget
 link
   :: (Reflex t, Monad m, HasDisplayRegion t m, HasImageWriter t m, HasInput t m, HasTheme t m)
-  => Behavior t Text
+  => Dynamic t Text
   -> m (Event t MouseUp)
 link t = do
   bt <- theme
@@ -116,9 +116,9 @@ checkboxStyleTick = CheckboxStyle
 
 -- | Configuration options for a checkbox
 data CheckboxConfig t = CheckboxConfig
-  { _checkboxConfig_checkboxStyle :: Behavior t CheckboxStyle
+  { _checkboxConfig_checkboxStyle :: Dynamic t CheckboxStyle
   -- TODO DELETE and use HasTheme instead
-  , _checkboxConfig_attributes :: Behavior t V.Attr
+  , _checkboxConfig_attributes :: Dynamic t V.Attr
   , _checkboxConfig_setValue :: Event t Bool
   }
 
@@ -145,15 +145,15 @@ checkbox cfg v0 = do
     , not <$ space
     , const <$> _checkboxConfig_setValue cfg
     ]
-  depressed <- hold V.defaultStyleMask $ leftmost
+  depressed <- holdDyn V.defaultStyleMask $ leftmost
     [ V.bold <$ md
     , V.defaultStyleMask <$ mu
     ]
-  let focused = ffor (current f) $ \x -> if x then V.bold else V.defaultStyleMask
+  let focused = ffor f $ \x -> if x then V.bold else V.defaultStyleMask
   let attrs = combineStyles
         <$> _checkboxConfig_attributes cfg
         <*> sequence [depressed, focused]
-  richText (RichTextConfig attrs) $ join . current $ ffor v $ \checked ->
+  richText (RichTextConfig attrs) $ join $ ffor v $ \checked ->
     if checked
       then _checkboxStyle_checked <$> _checkboxConfig_checkboxStyle cfg
       else _checkboxStyle_unchecked <$> _checkboxConfig_checkboxStyle cfg

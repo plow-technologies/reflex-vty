@@ -14,7 +14,7 @@ import Reflex.Vty.Widget
 import Reflex.Vty.Widget.Input.Mouse
 
 -- | Fill the background with a particular character.
-fill :: (HasDisplayRegion t m, HasImageWriter t m, HasTheme t m) => Behavior t Char -> m ()
+fill :: (HasDisplayRegion t m, HasImageWriter t m, HasTheme t m) => Dynamic t Char -> m ()
 fill bc = do
   dw <- displayWidth
   dh <- displayHeight
@@ -22,14 +22,14 @@ fill bc = do
   let fillImg =
         (\attr w h c -> [V.charFill attr c w h])
         <$> bt
-        <*> current dw
-        <*> current dh
+        <*> dw
+        <*> dh
         <*> bc
   tellImages fillImg
 
 -- | Configuration options for displaying "rich" text
 data RichTextConfig t = RichTextConfig
-  { _richTextConfig_attributes :: Behavior t V.Attr
+  { _richTextConfig_attributes :: Dynamic t V.Attr
   }
 
 instance Reflex t => Default (RichTextConfig t) where
@@ -41,12 +41,12 @@ instance Reflex t => Default (RichTextConfig t) where
 richText
   :: (Reflex t, Monad m, HasDisplayRegion t m, HasImageWriter t m, HasTheme t m)
   => RichTextConfig t
-  -> Behavior t Text
+  -> Dynamic t Text
   -> m ()
 richText cfg t = do
   dw <- displayWidth
   let img = (\w a s -> [wrapText w a s])
-        <$> current dw
+        <$> dw
         <*> _richTextConfig_attributes cfg
         <*> t
   tellImages img
@@ -58,7 +58,7 @@ richText cfg t = do
 -- | Renders text, wrapped to the container width
 text
   :: (Reflex t, Monad m, HasDisplayRegion t m, HasImageWriter t m, HasTheme t m)
-  => Behavior t Text
+  => Dynamic t Text
   -> m ()
 text t = do
   bt <- theme
@@ -70,13 +70,13 @@ scrollableText
   :: forall t m. (Reflex t, MonadHold t m, MonadFix m, HasDisplayRegion t m, HasInput t m, HasImageWriter t m, HasTheme t m)
   => Event t Int
   -- ^ Number of lines to scroll by
-  -> Behavior t Text
-  -> m (Behavior t (Int, Int))
+  -> Dynamic t Text
+  -> m (Dynamic t (Int, Int))
   -- ^ (Current scroll position, total number of lines)
 scrollableText scrollBy t = do
   dw <- displayWidth
   bt <- theme
-  let imgs = wrap <$> bt <*> current dw <*> t
+  let imgs = wrap <$> bt <*> dw <*> t
   kup <- key V.KUp
   kdown <- key V.KDown
   m <- mouseScroll
@@ -91,9 +91,9 @@ scrollableText scrollBy t = do
         ]
       updateLine maxN delta ix = min (max 0 (ix + delta)) maxN
   lineIndex :: Dynamic t Int <- foldDyn (\(maxN, delta) ix -> updateLine (maxN - 1) delta ix) 0 $
-    attach (length <$> imgs) requestedScroll
-  tellImages $ fmap ((:[]) . V.vertCat) $ drop <$> current lineIndex <*> imgs
-  return $ (,) <$> ((+) <$> current lineIndex <*> pure 1) <*> (length <$> imgs)
+    attach (current (length <$> imgs)) requestedScroll
+  tellImages $ fmap ((:[]) . V.vertCat) $ drop <$> lineIndex <*> imgs
+  return $ (,) <$> ((+) <$> lineIndex <*> pure 1) <*> (length <$> imgs)
   where
     wrap attr maxWidth = concatMap (fmap (V.string attr . T.unpack) . TZ.wrapWithOffset maxWidth 0) . T.split (=='\n')
 
@@ -101,6 +101,6 @@ scrollableText scrollBy t = do
 -- 'String' as text
 display
   :: (Reflex t, Monad m, Show a, HasDisplayRegion t m, HasImageWriter t m, HasTheme t m)
-  => Behavior t a
+  => Dynamic t a
   -> m ()
 display a = text $ T.pack . show <$> a

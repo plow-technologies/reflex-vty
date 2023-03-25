@@ -56,8 +56,8 @@ roundedBoxStyle = BoxStyle '╭' '─' '╮' '│' '╯' '─' '╰' '│'
 
 -- | Draws a titled box in the provided style and a child widget inside of that box
 boxTitle :: (MonadFix m, MonadHold t m, HasDisplayRegion t m, HasImageWriter t m, HasInput t m, HasFocusReader t m, HasTheme t m)
-    => Behavior t BoxStyle
-    -> Behavior t Text
+    => Dynamic t BoxStyle
+    -> Dynamic t Text
     -> m a
     -> m a
 boxTitle boxStyle title child = do
@@ -67,8 +67,8 @@ boxTitle boxStyle title child = do
   let boxReg = Region 0 0 <$> dw <*> dh
       innerReg = Region 1 1 <$> (subtract 2 <$> dw) <*> (subtract 2 <$> dh)
 
-  tellImages (boxImages <$> bt <*> title <*> boxStyle <*> current boxReg)
-  tellImages (ffor2 (current innerReg) bt (\r attr -> [regionBlankImage attr r]))
+  tellImages (boxImages <$> bt <*> title <*> boxStyle <*> boxReg)
+  tellImages (ffor2 (innerReg) bt (\r attr -> [regionBlankImage attr r]))
 
   pane innerReg (pure True) child
   where
@@ -111,7 +111,7 @@ boxTitle boxStyle title child = do
 
 -- | A box without a title
 box :: (MonadFix m, MonadHold t m, HasDisplayRegion t m, HasImageWriter t m, HasInput t m, HasFocusReader t m, HasTheme t m)
-    => Behavior t BoxStyle
+    => Dynamic t BoxStyle
     -> m a
     -> m a
 box boxStyle = boxTitle boxStyle mempty
